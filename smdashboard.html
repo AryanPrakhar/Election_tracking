@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1 {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  #map {
+    height: 600px;
+    margin: 20px auto;
+  }
+
+  #status {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .status-box {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 10px;
+    display: inline-block;
+    margin-right: 10px;
+  }
+
+  .status-label {
+    font-weight: bold;
+  }
+
+  .huechange {
+    filter: hue-rotate(190deg);
+  }
+</style>
+</head>
+<body>
+  <h1>Live Location Dashboard</h1>
+  <div id="map"></div>
+  <div id="status">
+    <div class="status-box">
+      <p class="status-label">Total Magistrates:</p>
+      <p id="totalOfficers">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">Currently patrolling:</p>
+      <p id="patrolling">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">Currently not patrolling:</p>
+      <p id="notPatrolling">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">Tracking Enabled:</p>
+      <p id="trackingEnabled">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">Tracking Disabled:</p>
+      <p id="trackingDisabled">0</p>
+    </div>
+    
+    <div class="status-box">
+      <p class="status-label">Total Polling Parties:</p>
+      <p id="totalPS">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">PP reached:</p>
+      <p id="reachedPS">0</p>
+    </div>
+    <div class="status-box">
+      <p class="status-label">PP not reached:</p>
+      <p id="notReachedPS">0</p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      var map = L.map('map').setView([25.326875, 82.983908], 12); // set view anywhere.
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      function fetchAndDisplayLocations() {
+        fetch("/smdashboard2")
+          .then(response => response.json())
+          .then(data => {
+            var flag = 0;
+            var trackingEnabledCount = 0;
+            var totalPollingParties = 0;
+            var pollingPartiesReached = 0;
+
+            data.forEach(location => {
+              var e_coordinates = location.before30mins_location.split(',');
+              var e_latlng = [parseFloat(e_coordinates[0]), parseFloat(e_coordinates[1])];
+              var c_coordinates = location.current_location.split(',');
+              var c_latlng = [parseFloat(c_coordinates[0]), parseFloat(c_coordinates[1])];
+
+              var temp = c_latlng[0];
+              if (c_latlng[0] > c_latlng[1]) {
+                temp = c_latlng[0];
+                c_latlng[0] = c_latlng[1];
+                c_latlng[1] = temp;
+              }
+              temp = e_latlng[0];
+              if (e_latlng[0] > e_latlng[1]) {
+                temp = e_latlng[0];
+                e_latlng[0] = e_latlng[1];
+                e_latlng[1] = temp;
+              }
+
+              var distance = L.latLng(c_latlng).distanceTo(e_latlng);
+              var marker = L.marker(c_latlng).addTo(map);
+              
+              if (distance < 100) {
+                marker._icon.style.filter = "hue-rotate(170deg)";
+                flag++;
+              } else {
+                marker._icon.style.filter = "hue-rotate(235deg)";
+              }
+
+              if (location.isTrackingEnabled) {
+                trackingEnabledCount++;
+              }
+
+              // Assuming officerNum starts with '1' for polling parties
+              if (location.officerNum.startsWith('1')) {
+                totalPollingParties++;
+                if (distance < 100) {
+                  pollingPartiesReached++;
+                }
+              }
+
+              marker.bindPopup('Magistrate ' + location.officerNum + '<br>Location: ' + c_latlng + '<br>Distance from last location: ' + distance).openPopup();
+            });
+
+            var totalOfficers = data.length;
+            var trackingDisabledCount = totalOfficers - trackingEnabledCount;
+
+            document.getElementById('totalOfficers').textContent = totalOfficers;
+            document.getElementById('patrolling').textContent = totalOfficers - flag;
+            document.getElementById('notPatrolling').textContent = flag;
+            document.getElementById('trackingEnabled').textContent = trackingEnabledCount;
+            document.getElementById('trackingDisabled').textContent = trackingDisabledCount;
+            document.getElementById('totalPS').textContent = totalPollingParties;
+            document.getElementById('reachedPS').textContent = pollingPartiesReached;
+            document.getElementById('notReachedPS').textContent = totalPollingParties - pollingPartiesReached;
+          })
+          .catch(error => console.error("Error in fetching Officers' locations:", error));
+      }
+
+      fetchAndDisplayLocations();
+      setInterval(fetchAndDisplayLocations, 60000); // 1 minute in milliseconds
+    });
+  </script>
+</body>
+</html>
